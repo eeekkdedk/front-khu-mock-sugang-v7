@@ -1,0 +1,76 @@
+# 환경변수로 덮어쓸 수 있다. NCP 서버에서는 DB_URL, DB_USERNAME, DB_PASSWORD, CORS_ALLOWED_ORIGINS만 바꾸면 된다.
+server:
+  port: ${PORT:8080}
+
+spring:
+  application:
+    name: course-change-be
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/course_change?serverTimezone=Asia/Seoul&characterEncoding=UTF-8}
+    username: ${DB_USERNAME:course_change}
+    password: ${DB_PASSWORD:course_change}
+  jpa:
+    open-in-view: false
+    hibernate:
+      # 테이블은 Flyway(db/migration)가 만든다. JPA는 엔티티와 테이블이 맞는지 검사만 한다.
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_batch_fetch_size: 100
+        jdbc:
+          time_zone: Asia/Seoul
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  jackson:
+    time-zone: Asia/Seoul
+
+app:
+  auth:
+    # TOKEN(기본): 로그인 토큰만 인정. DEMO: X-Student-Id 헤더도 인정 (로컬·부하테스트용, 공개 서버 금지)
+    mode: ${APP_AUTH_MODE:TOKEN}
+    # 토큰 서명 키. 비워 두면 기동마다 무작위 생성(재시작 시 토큰 무효). 운영은 환경변수로 고정 권장.
+    secret: ${APP_AUTH_SECRET:}
+    token-ttl-seconds: ${APP_AUTH_TOKEN_TTL:28800}
+  matching:
+    # 10월 27일 부하테스트: 1차는 NONE, 2차는 PESSIMISTIC으로 실행해 비교한다.
+    #   java -jar app.jar --app.matching.lock-mode=PESSIMISTIC
+    # 또는 환경변수 APP_MATCHING_LOCK_MODE=PESSIMISTIC
+    lock-mode: ${APP_MATCHING_LOCK_MODE:NONE}
+    # 매칭 후 양쪽이 동의해야 하는 제한 시간(초)
+    accept-timeout-seconds: ${APP_MATCHING_ACCEPT_TIMEOUT:120}
+    # 매칭 실패 후 같은 두 학생이 다시 매칭될 수 없는 시간(초)
+    rematch-cooldown-seconds: ${APP_MATCHING_REMATCH_COOLDOWN:300}
+    # 요청 1건의 희망 분반 최대 개수
+    max-preferences: 10
+    # 패널티: 거절 2점, 잠수(만료까지 무응답) 5점. 최근 24시간 누적 10점 이상이면 60분간 매칭 차단.
+    penalty-reject-points: 2
+    penalty-no-response-points: 5
+    penalty-block-threshold-points: 10
+    penalty-window-hours: 24
+    penalty-block-minutes: 60
+    # 만료 세션 자동 처리 (끄려면 APP_MATCHING_EXPIRE_SCHEDULER=false)
+    expire-scheduler-enabled: ${APP_MATCHING_EXPIRE_SCHEDULER:true}
+    expire-scheduler-interval-ms: 5000
+    # 우선순위 점수 = 학년*10 + 기다린 분(최대 120)*1 + 남은 학점 여유*1 - 최근 감점*5
+    score-year-weight: 10
+    score-wait-weight-per-minute: 1
+    score-wait-cap-minutes: 120
+    score-credit-slack-weight: 1
+    score-penalty-weight: 5
+  cors:
+    # 프론트 주소 (쉼표로 여러 개). 예: CORS_ALLOWED_ORIGINS=http://localhost:5173,http://<프론트서버IP>
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173,http://127.0.0.1:5173}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: method
+  default-produces-media-type: application/json
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

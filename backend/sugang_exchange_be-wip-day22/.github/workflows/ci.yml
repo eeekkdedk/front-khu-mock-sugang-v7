@@ -1,0 +1,85 @@
+# push·PR마다 자동 실행: 1) 테스트 (실제 MySQL 컨테이너)  2) jar 실행 후 API·Swagger 스모크 테스트
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: 테스트 (Testcontainers MySQL)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: 테스트 실행
+        run: |
+          set -o pipefail
+          ./gradlew test --no-daemon 2>&1 | tee gradle-test.log
+      - name: 실패 원인 요약
+        if: failure()
+        run: python3 scripts/ci-annotate.py gradle-test.log
+      - name: 건너뛴 테스트가 없는지 확인 (Docker 문제로 DB 테스트가 skip되면 실패 처리)
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import glob, xml.etree.ElementTree as ET
+          total = failed = skipped = 0
+          for f in glob.glob('build/test-results/test/*.xml'):
+              r = ET.parse(f).getroot()
+              total += int(r.get('tests')); skipped += int(r.get('skipped'))
+              failed += int(r.get('failures')) + int(r.get('errors'))
+          print(f'tests={total} failed={failed} skipped={skipped}')
+          if total == 0 or skipped > 0 or failed > 0:
+              raise SystemExit(1)
+          PY
+      - name: 테스트 리포트 업로드
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: build/reports/tests/test
+
+  smoke:
+    name: 실행 확인 (jar + MySQL + Swagger)
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_DATABASE: course_change
+          MYSQL_USER: course_change
+          MYSQL_PASSWORD: course_change
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -proot"
+          --health-interval=5s --health-timeout=3s --health-retries=30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: jar 빌드
+        run: |
+          set -o pipefail
+          ./gradlew bootJar --no-daemon 2>&1 | tee gradle-build.log
+      - name: 서버 실행 후 API 호출
+        run: |
+          set -o pipefail
+          java -jar build/libs/app.jar > app.log 2>&1 &
+          bash scripts/smoke-test.sh http://localhost:8080 2>&1 | tee smoke.log
+      - name: 실패 원인 요약
+        if: failure()
+        run: python3 scripts/ci-annotate.py gradle-build.log smoke.log app.log
+      - name: 서버 로그
+        if: always()
+        run: cat app.log || true

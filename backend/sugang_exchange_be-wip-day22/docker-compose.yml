@@ -1,0 +1,27 @@
+# 로컬 개발용 MySQL. 실행: docker compose up -d   /  중지: docker compose down
+# 데이터까지 지우고 처음부터: docker compose down -v
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: course-change-mysql
+    environment:
+      MYSQL_DATABASE: course_change
+      MYSQL_USER: course_change
+      MYSQL_PASSWORD: course_change
+      MYSQL_ROOT_PASSWORD: root
+      TZ: Asia/Seoul
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  mysql-data:
