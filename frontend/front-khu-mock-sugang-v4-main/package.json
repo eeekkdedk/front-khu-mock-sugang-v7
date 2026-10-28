@@ -1,7 +1,8 @@
 {
-  "name": "frontend",
+  "name": "front-khu-mock-sugang-v4",
   "version": "0.1.0",
   "private": true,
+  "proxy": "https://gruesome-broomstick-px65w55v99pf6xq6-8081.app.github.dev",
   "scripts": {
     "serve": "vue-cli-service serve",
     "build": "vue-cli-service build",

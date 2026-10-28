@@ -111,40 +111,62 @@ export default {
     };
   },
   methods: {
-    async startTest() {
-      // 1. 입력 검증
-      if (!this.fakeId || !this.fakeId.trim()) {
-        alert('학번을 입력해 주세요.');
-        return; 
-      }
+async startTest() {
+  // 1. 입력 값 가져오기 (공백 제거 및 문자열 변환)
+  const studentNo = String(this.fakeId).trim();
+  const password = String(this.fakePwd).trim(); // 사용자가 입력한 비밀번호 그대로 가져옴
 
-      const studentId = String(this.fakeId).trim();
-      const password = this.fakePwd ? String(this.fakePwd).trim() : studentId;
+  // 2. 유효성 검사 (둘 다 입력되어야 함)
+  if (!studentNo || !password) {
+    alert('학번과 비밀번호를 모두 입력해 주세요.');
+    return;
+  }
+
+  // 3. [핵심] 백엔드 스펙에 맞춘 정석 페이로드
+  // 백엔드 README 명세에 따라 'studentNo'와 'password'를 정확히 전달합니다.
+  const loginPayload = {
+    studentNo: studentNo, 
+    password: password
+  };
+
+  console.log('로그인 시도 데이터:', loginPayload);
+
+  try {
+    // 4. API 호출 (api 모듈 사용)
+    // 백엔드 엔드포인트가 /api/auth/login 인지 확인 필요
+    const res = await api.post('/api/auth/login', loginPayload);
+
+    // 5. 성공 시 처리
+    if (res.data && res.data.accessToken) {
+      console.log('로그인 성공! 토큰 수신 완료');
       
-      localStorage.setItem('selectedStudentId', studentId);
-
-      try {
-        // 2. 백엔드로 cURL과 동일한 바디 규격 전송
-        const res = await api.post('/api/auth/login', {
-          studentNo: studentId,
-          password: password
-        });
-
-        // 3. 토큰 발급 확인
-        if (res.data && res.data.accessToken) {
-          localStorage.setItem('accessToken', res.data.accessToken);
-          this.$emit('startTest');
-        } else {
-          alert('토큰 발급 실패: 응답 형식을 확인하세요.');
-        }
-
-      } catch (err) {
-        console.error('로그인 통신 실패 상세:', err);
-        const status = err.response?.status;
-        const msg = err.response?.data?.message || err.message;
-        alert(`로그인 실패 [에러코드 ${status || 'NET'}]: ${msg}`);
-      }
+      // 토큰과 학번을 저장하여 로그인 상태 유지
+      localStorage.setItem('accessToken', res.data.accessToken);
+      localStorage.setItem('selectedStudentId', studentNo);
+      
+      // 성공 시 부모 컴포넌트로 이벤트 전송
+      this.$emit('startTest'); 
+    } else {
+      throw new Error('서버 응답에 토큰이 없습니다.');
     }
+
+  } catch (err) {
+    // 6. 실패 시 상세 이유 보고
+    console.error('로그인 실패 상세:', err);
+    
+    let msg = '로그인에 실패했습니다.';
+    if (err.response) {
+      // 백엔드에서 보내준 에러 메시지 (예: "비밀번호가 틀렸습니다")
+      msg = err.response.data?.message || `서버 에러: ${err.response.status}`;
+    } else if (err.request) {
+      // 서버에 요청은 보냈으나 응답을 못 받은 경우 (서버 꺼짐 등)
+      msg = '서버와 연결할 수 없습니다. 백엔드 서버가 실행 중인지 확인하세요.';
+    }
+    
+    alert(msg);
+  }
+}
+
   }
 };
 </script>
